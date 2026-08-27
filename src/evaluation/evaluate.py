@@ -11,7 +11,7 @@ model = create_resnet18().to(device)
 
 model.load_state_dict(
     torch.load(
-        "models/checkpoints/resnet18_baseline.pth",
+        "models/checkpoints/resnet18_best.pth",
         map_location=device
     )
 )
