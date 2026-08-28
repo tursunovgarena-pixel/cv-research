@@ -1,5 +1,8 @@
+import argparse
+import random
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,14 +13,33 @@ from src.models.resnet import create_resnet18
 from src.training.trainer import Trainer
 
 
+# Read seed from terminal
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed", type=int, default=42)
+args = parser.parse_args()
+
+seed = args.seed
+
+
+# Reproducibility
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+
+
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
+
 
 print("=" * 50)
 print("Training ResNet18")
 print("=" * 50)
 print("Device:", device)
+print("Seed:", seed)
 
 
 # Dataset
@@ -34,7 +56,7 @@ val_size = len(dataset) - train_size
 train_dataset, val_dataset = random_split(
     dataset,
     [train_size, val_size],
-    generator=torch.Generator().manual_seed(42)
+    generator=torch.Generator().manual_seed(seed)
 )
 
 
@@ -103,7 +125,6 @@ for epoch in range(epochs):
         f"Val Acc: {val_accuracy:.2f}%"
     )
 
-
     # Save best model
     if val_accuracy > best_val_accuracy:
 
@@ -111,7 +132,7 @@ for epoch in range(epochs):
 
         torch.save(
             model.state_dict(),
-            "models/checkpoints/resnet18_best.pth"
+            f"models/checkpoints/resnet18_seed{seed}_best.pth"
         )
 
         print(

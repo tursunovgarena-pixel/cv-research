@@ -1,19 +1,24 @@
+import csv
+from pathlib import Path
+
 import torch
 from torch.utils.data import DataLoader
 
 from src.datasets.cifar10_dataset import CIFAR10Dataset
 from src.models.resnet import create_resnet18
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = create_resnet18().to(device)
-model.load_state_dict(
-    torch.load(
-        "models/checkpoints/resnet18_best.pth",
-        map_location=device,
-    )
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
 )
-model.eval()
+
+
+checkpoints = [
+    "resnet18_seed42_best.pth",
+    "resnet18_seed123_best.pth",
+    "resnet18_seed2026_best.pth",
+]
+
 
 degradations = [
     None,
@@ -24,58 +29,114 @@ degradations = [
     "jpeg",
 ]
 
+
 results = []
 
-for degradation in degradations:
 
-    dataset = CIFAR10Dataset(
-        train=False,
-        degradation=degradation,
+for checkpoint in checkpoints:
+
+    print("\n" + "=" * 50)
+    print(f"Evaluating: {checkpoint}")
+    print("=" * 50)
+
+    model = create_resnet18().to(device)
+
+    model.load_state_dict(
+        torch.load(
+            f"models/checkpoints/{checkpoint}",
+            map_location=device,
+        )
     )
 
-    loader = DataLoader(
-        dataset,
-        batch_size=128,
-        shuffle=False,
-    )
+    model.eval()
 
-    correct = 0
-    total = 0
+    model_results = {}
 
-    with torch.no_grad():
+    for degradation in degradations:
 
-        for images, labels in loader:
+        dataset = CIFAR10Dataset(
+            train=False,
+            degradation=degradation,
+        )
 
-            images = images.to(device)
-            labels = labels.to(device)
+        loader = DataLoader(
+            dataset,
+            batch_size=128,
+            shuffle=False,
+        )
 
-            outputs = model(images)
+        correct = 0
+        total = 0
 
-            predictions = outputs.argmax(dim=1)
+        with torch.no_grad():
 
-            correct += (predictions == labels).sum().item()
-            total += labels.size(0)
+            for images, labels in loader:
 
-    accuracy = 100 * correct / total
+                images = images.to(device)
+                labels = labels.to(device)
 
-    name = "original" if degradation is None else degradation
+                outputs = model(images)
 
-    results.append((name, accuracy))
+                predictions = outputs.argmax(dim=1)
 
-import csv
+                correct += (
+                    (predictions == labels)
+                    .sum()
+                    .item()
+                )
 
-print("\n========== RESULTS ==========\n")
+                total += labels.size(0)
 
-with open("results/results.csv", "w", newline="") as file:
+        accuracy = 100 * correct / total
+
+        name = (
+            "original"
+            if degradation is None
+            else degradation
+        )
+
+        model_results[name] = accuracy
+
+        results.append(
+            [checkpoint, name, accuracy]
+        )
+
+        print(
+            f"{name:12} {accuracy:.2f}%"
+        )
+
+
+# Save results
+Path("results").mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+output_file = "results/robustness_results.csv"
+
+with open(
+    output_file,
+    "w",
+    newline=""
+) as file:
 
     writer = csv.writer(file)
 
-    writer.writerow(["Degradation", "Accuracy"])
+    writer.writerow(
+        [
+            "Model",
+            "Degradation",
+            "Accuracy",
+        ]
+    )
 
-    for name, accuracy in results:
+    writer.writerows(results)
 
-        writer.writerow([name, accuracy])
 
-        print(f"{name:12} {accuracy:.2f}%")
+print("\n" + "=" * 50)
+print("All experiments completed")
+print("=" * 50)
 
-print("\nResults saved to results/results.csv")
+print(
+    f"Results saved to {output_file}"
+)
